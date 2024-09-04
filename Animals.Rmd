@@ -1,0 +1,236 @@
+---
+title: "Animals"
+output: html_document
+
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(cowplot)
+library(gridGraphics)
+
+
+library(DomArchive)
+data(dom.data)
+data(dom.metadata)
+```
+Helpers for dom:
+```{r}
+# Function to standardize the strings
+standardize_string <- function(x) {
+  tolower(gsub("_", " ", x))
+}
+
+# Standardize both vectors
+dom.species <- standardize_string(dom.metadata$species)
+dom.metadata$species <- dom.species
+```
+
+Offspring:
+```{r}
+offspring.df <- read.csv("databases/offspring.csv")
+
+# find common species in dom and offspring
+offspring.species.com <- offspring.df$species[offspring.df$species %in% dom.species]
+
+# get average values of domination for species, in common species between dom and offspring
+dom_offspring.avg <- dom.metadata %>%
+  filter(dom.species %in% offspring.species.com) %>%
+  group_by(species) %>%
+  summarize(
+    dci.avg = mean(dci, na.rm = TRUE),
+    ttri.avg = mean(ttri, na.rm = TRUE),
+    ds_steepness.avg = mean(ds_steepness, na.rm = TRUE),
+    modified_landaus_h.avg = mean(modified_landaus_h, na.rm = TRUE)
+  ) %>%
+  left_join(offspring.df %>% select(species, offspring),by = "species")
+
+# add normalize values
+dom_offspring.avg$offspring.norm <- (dom_offspring.avg$offspring - min(dom_offspring.avg$offspring)) / (max(dom_offspring.avg$offspring) - min(dom_offspring.avg$offspring))
+
+# run regressions
+summary(lm(dci.avg ~ offspring, data = dom_offspring.avg))
+summary(lm(ttri.avg ~ offspring, data = dom_offspring.avg))
+summary(lm(ds_steepness.avg ~ offspring, data = dom_offspring.avg))
+summary(lm(modified_landaus_h.avg ~ offspring, data = dom_offspring.avg))
+
+```
+
+Independence age:
+```{r}
+ind.df <- read.csv("databases/ind.csv")
+
+# find common species in dom and ind
+ind.species.com <- ind.df$species[ind.df$species %in% dom.species]
+
+# get average values of domination for species, in common species between dom and ind
+dom_ind.avg <- dom.metadata %>%
+  filter(dom.species %in% ind.species.com) %>%
+  group_by(species) %>%
+  summarize(
+    dci.avg = mean(dci, na.rm = TRUE),
+    ttri.avg = mean(ttri, na.rm = TRUE),
+    ds_steepness.avg = mean(ds_steepness, na.rm = TRUE),
+    modified_landaus_h.avg = mean(modified_landaus_h, na.rm = TRUE)
+  ) %>%
+  left_join(ind.df %>% select(species, ind),by = "species")
+
+# add normalized values
+dom_ind.avg$ind.norm <- (dom_ind.avg$ind - min(dom_ind.avg$ind)) / (max(dom_ind.avg$ind) - min(dom_ind.avg$ind))
+
+# run regressions
+summary(lm(dci.avg ~ ind, data = dom_ind.avg))
+summary(lm(ttri.avg ~ ind, data = dom_ind.avg))
+summary(lm(ds_steepness.avg ~ ind, data = dom_ind.avg))
+summary(lm(modified_landaus_h.avg ~ ind, data = dom_ind.avg))
+
+```
+
+Lifespan in the wild:
+```{r}
+lifespan.df <- read.csv("databases/lifespan.csv")
+
+# find common species in dom and lifespan
+lifespan.species.com <- lifespan.df$species[lifespan.df$species %in% dom.species]
+
+# get average values of domination for species, in common species between dom and lifespan
+dom_lifespan.avg <- dom.metadata %>%
+  filter(dom.species %in% lifespan.species.com) %>%
+  group_by(species) %>%
+  summarize(
+    dci.avg = mean(dci, na.rm = TRUE),
+    ttri.avg = mean(ttri, na.rm = TRUE),
+    ds_steepness.avg = mean(ds_steepness, na.rm = TRUE),
+    modified_landaus_h.avg = mean(modified_landaus_h, na.rm = TRUE)
+  ) %>%
+  left_join(lifespan.df %>% select(species, lifespan),by = "species")
+
+# add normalized values
+dom_lifespan.avg$lifespan.norm <- (dom_lifespan.avg$lifespan - min(dom_lifespan.avg$lifespan)) / (max(dom_lifespan.avg$lifespan) - min(dom_lifespan.avg$lifespan))
+
+# run regressions
+summary(lm(dci.avg ~ lifespan, data = dom_lifespan.avg))
+summary(lm(ttri.avg ~ lifespan, data = dom_lifespan.avg))
+summary(lm(ds_steepness.avg ~ lifespan, data = dom_lifespan.avg))
+summary(lm(modified_landaus_h.avg ~ lifespan, data = dom_lifespan.avg))
+
+```
+
+Crosses:
+```{r}
+# offspring and ind
+dom_offspring_ind.avg <- merge(dom_offspring.avg, dom_ind.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"))
+
+summary(lm(dci.avg ~ offspring + ind, data = dom_offspring_ind.avg))
+summary(lm(ttri.avg ~ offspring + ind, data = dom_offspring_ind.avg))
+summary(lm(ds_steepness.avg ~ offspring + ind, data = dom_offspring_ind.avg))
+summary(lm(modified_landaus_h.avg ~ offspring + ind, data = dom_offspring_ind.avg))
+
+# offspring and lifespan
+dom_offspring_lifespan.avg <- merge(dom_offspring.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"))
+
+summary(lm(dci.avg ~ offspring + lifespan, data = dom_offspring_lifespan.avg))
+summary(lm(ttri.avg ~ offspring + lifespan, data = dom_offspring_lifespan.avg))
+summary(lm(ds_steepness.avg ~ offspring + lifespan, data = dom_offspring_lifespan.avg))
+summary(lm(modified_landaus_h.avg ~ offspring + lifespan, data = dom_offspring_lifespan.avg))
+
+# ind and lifespan
+dom_ind_lifespan.avg <- merge(dom_ind.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"))
+
+summary(lm(dci.avg ~ ind + lifespan, data = dom_ind_lifespan.avg))
+summary(lm(ttri.avg ~ ind + lifespan, data = dom_ind_lifespan.avg))
+summary(lm(ds_steepness.avg ~ ind + lifespan, data = dom_ind_lifespan.avg))
+summary(lm(modified_landaus_h.avg ~ ind + lifespan, data = dom_ind_lifespan.avg))
+
+# all
+dom_offspring_ind_lifespan.avg <- merge(dom_offspring.avg, dom_ind_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"))
+
+summary(lm(dci.avg ~ offspring + ind + lifespan, data = dom_offspring_ind_lifespan.avg))
+summary(lm(ttri.avg ~ offspring + ind + lifespan, data = dom_offspring_ind_lifespan.avg))
+summary(lm(ds_steepness.avg ~ offspring + ind + lifespan, data = dom_offspring_ind_lifespan.avg))
+summary(lm(modified_landaus_h.avg ~ offspring + ind + lifespan, data = dom_offspring_ind_lifespan.avg))
+
+```
+Plot:
+```{r}
+# merge all without deleting rows:
+dom_ind_lifespan.avg.all <- dom_ind_lifespan.avg <- merge(dom_ind.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"), all = TRUE)
+dom_offspring_ind_lifespan.avg.all <- merge(dom_offspring.avg, dom_ind_lifespan.avg.all, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"), all = TRUE)
+```
+DCI:
+```{r}
+dci.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("dci.avg", "offspring.norm", "ind.norm", "lifespan.norm")], id.vars = "dci.avg")
+
+# Plotting
+dci.plot <- ggplot(data=dci.long, aes(x = value, y = dci.avg, color = variable)) +
+  geom_point() +
+  labs(x = "Normalized Value", y = "DCI", color = "Variable") +
+  scale_color_brewer(palette = "Dark2", 
+                     labels = c("Offspring", "Independence Age", "Lifespan")) +
+  theme_minimal() +
+  theme(legend.position = "right")
+```
+
+TTRI:
+```{r}
+ttri.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("ttri.avg", "offspring.norm", "ind.norm", "lifespan.norm")], id.vars = "ttri.avg")
+
+# Plotting
+ttri.plot <- ggplot(data=ttri.long, aes(x = value, y = ttri.avg, color = variable)) +
+  geom_point() + 
+  labs(x = "Normalized Value", y = "TTRI", color = "Variable") +
+  scale_color_brewer(palette = "Dark2", 
+                     labels = c("Offspring", "Independence Age", "Lifespan")) +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legend
+```
+
+DS_Steepness:
+```{r}
+ds_steepness.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("ds_steepness.avg", "offspring.norm", "ind.norm", "lifespan.norm")], id.vars = "ds_steepness.avg")
+
+# Plotting
+ds_steepness.plot <- ggplot(data=ds_steepness.long, aes(x = value, y = ds_steepness.avg, color = variable)) +
+  geom_point() +
+  labs(x = "Normalized Value", y = "DS Steepness", color = "Variable") +
+  scale_color_brewer(palette = "Dark2", 
+                     labels = c("Offspring", "Independence Age", "Lifespan")) +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legend
+```
+
+Modifies Landau's H:
+```{r}
+modified_landaus_h.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("modified_landaus_h.avg", "offspring.norm", "ind.norm", "lifespan.norm")], id.vars = "modified_landaus_h.avg")
+
+# Plotting
+modified_landaus_h.plot <- ggplot(data=modified_landaus_h.long, aes(x = value, y = modified_landaus_h.avg, color = variable)) +
+  geom_point() +
+  labs(x = "Normalized Value", y = "Modified Landau's H", color = "Variable") +
+  scale_color_brewer(palette = "Dark2", 
+                     labels = c("Offspring", "Independence Age", "Lifespan")) +
+  theme_minimal() +
+  theme(legend.position = "none")  # Remove legend
+```
+
+Combine plots:
+```{r}
+dom.legend <- cowplot::get_legend(dci.plot)
+dom.plot <- cowplot::plot_grid(
+  dci.plot + theme(legend.position = "none"), ttri.plot, ds_steepness.plot, modified_landaus_h.plot,
+  ncol = 2, align = 'v'
+)
+dom.plot <- cowplot::plot_grid(dom.plot, dom.legend, ncol = 1, rel_heights = c(1, 0.3))
+print(dom.plot)
+
+
+```
