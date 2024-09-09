@@ -31,7 +31,43 @@ standardize_string <- function(x) {
 # Standardize both vectors
 dom.species <- standardize_string(dom.metadata$species)
 dom.metadata$species <- dom.species
+
+dom.values <- dom.metadata %>%
+  group_by(species) %>%
+  summarize(
+    dci.avg = mean(dci, na.rm = TRUE),
+    ttri.avg = mean(ttri, na.rm = TRUE),
+    ds_steepness.avg = mean(ds_steepness, na.rm = TRUE),
+    modified_landaus_h.avg = mean(modified_landaus_h, na.rm = TRUE)
+  ) %>% na.omit()
+
+#write.csv(dom.values,"dom_values.csv")
 ```
+
+Divide to quarters:
+
+    # Define function without recursion to divide into quarters
+    divide_into_quarters <- function(column) {
+      min_val <- min(column, na.rm = TRUE)
+      max_val <- max(column, na.rm = TRUE)
+      
+      # Cut the data into 4 intervals (Q1 to Q4)
+      cut(column, 
+          breaks = seq(min_val, max_val, length.out = 5), 
+          labels = c("1", "2", "3", "4"), 
+          include.lowest = TRUE)
+    }
+      
+    dom.values$dci.quarter <- divide_into_quarters(dom.values$dci.avg)
+    dom.values$ttri.quarter <- divide_into_quarters(dom.values$ttri.avg)
+    dom.values$ds_steepness.quarter <- divide_into_quarters(dom.values$ds_steepness.avg)
+    dom.values$modified_landaus_h.quarter <- divide_into_quarters(dom.values$modified_landaus_h.avg)
+
+    dom.values$dom.category <- with(dom.values, 
+      ifelse(dci.quarter == 4 & ttri.quarter == 4 & ds_steepness.quarter == 4, "hier",
+      ifelse(dci.quarter == 3 & (ttri.quarter == 3 | ttri.quarter == 2) & ds_steepness.quarter == 4, "dyadic",
+      ifelse(dci.quarter == 2 & ttri.quarter == 2 & ds_steepness.quarter == 2, "desp",
+      ifelse(dci.quarter == 4 & ttri.quarter == 1 & ds_steepness.quarter == 1, "cyclic", NA)))))
 
 Offspring:
 
@@ -39,18 +75,11 @@ Offspring:
 offspring.df <- read.csv("databases/offspring.csv")
 
 # find common species in dom and offspring
-offspring.species.com <- offspring.df$species[offspring.df$species %in% dom.species]
+offspring.species.com <- offspring.df$species[offspring.df$species %in% dom.values$species]
 
 # get average values of domination for species, in common species between dom and offspring
-dom_offspring.avg <- dom.metadata %>%
-  filter(dom.species %in% offspring.species.com) %>%
-  group_by(species) %>%
-  summarize(
-    dci.avg = mean(dci, na.rm = TRUE),
-    ttri.avg = mean(ttri, na.rm = TRUE),
-    ds_steepness.avg = mean(ds_steepness, na.rm = TRUE),
-    modified_landaus_h.avg = mean(modified_landaus_h, na.rm = TRUE)
-  ) %>%
+dom_offspring.avg <- dom.values %>%
+  filter(dom.values$species %in% offspring.species.com) %>%
   left_join(offspring.df %>% select(species, offspring),by = "species")
 
 # add normalize values
@@ -135,24 +164,17 @@ summary(lm(modified_landaus_h.avg ~ offspring, data = dom_offspring.avg))
 #> F-statistic: 0.1834 on 1 and 67 DF,  p-value: 0.6698
 ```
 
-Independence age:
+Independence age (in minutes):
 
 ``` r
 ind.df <- read.csv("databases/ind.csv")
 
 # find common species in dom and ind
-ind.species.com <- ind.df$species[ind.df$species %in% dom.species]
+ind.species.com <- ind.df$species[ind.df$species %in% dom.values$species]
 
 # get average values of domination for species, in common species between dom and ind
-dom_ind.avg <- dom.metadata %>%
-  filter(dom.species %in% ind.species.com) %>%
-  group_by(species) %>%
-  summarize(
-    dci.avg = mean(dci, na.rm = TRUE),
-    ttri.avg = mean(ttri, na.rm = TRUE),
-    ds_steepness.avg = mean(ds_steepness, na.rm = TRUE),
-    modified_landaus_h.avg = mean(modified_landaus_h, na.rm = TRUE)
-  ) %>%
+dom_ind.avg <- dom.values %>%
+  filter(dom.values$species %in% ind.species.com) %>%
   left_join(ind.df %>% select(species, ind),by = "species")
 
 # add normalized values
@@ -243,18 +265,11 @@ Lifespan in the wild:
 lifespan.df <- read.csv("databases/lifespan.csv")
 
 # find common species in dom and lifespan
-lifespan.species.com <- lifespan.df$species[lifespan.df$species %in% dom.species]
+lifespan.species.com <- lifespan.df$species[lifespan.df$species %in% dom.values$species]
 
 # get average values of domination for species, in common species between dom and lifespan
-dom_lifespan.avg <- dom.metadata %>%
-  filter(dom.species %in% lifespan.species.com) %>%
-  group_by(species) %>%
-  summarize(
-    dci.avg = mean(dci, na.rm = TRUE),
-    ttri.avg = mean(ttri, na.rm = TRUE),
-    ds_steepness.avg = mean(ds_steepness, na.rm = TRUE),
-    modified_landaus_h.avg = mean(modified_landaus_h, na.rm = TRUE)
-  ) %>%
+dom_lifespan.avg <- dom.values %>%
+  filter(dom.values$species %in% lifespan.species.com) %>%
   left_join(lifespan.df %>% select(species, lifespan),by = "species")
 
 # add normalized values
@@ -427,7 +442,7 @@ summary(lm(modified_landaus_h.avg ~ offspring + ind, data = dom_offspring_ind.av
 #> F-statistic: 0.5049 on 2 and 29 DF,  p-value: 0.6088
 
 # offspring and lifespan
-dom_offspring_lifespan.avg <- merge(dom_offspring.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"))
+dom_offspring_lifespan.avg <- merge(dom_offspring.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"), all=FALSE)
 
 summary(lm(dci.avg ~ offspring + lifespan, data = dom_offspring_lifespan.avg))
 #> 
@@ -511,7 +526,9 @@ summary(lm(modified_landaus_h.avg ~ offspring + lifespan, data = dom_offspring_l
 #> F-statistic: 0.303 on 2 and 49 DF,  p-value: 0.74
 
 # ind and lifespan
-dom_ind_lifespan.avg <- merge(dom_ind.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"))
+dom_ind_lifespan.avg <- merge(dom_ind.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"), all=FALSE)
+
+dom_ind_lifespan.avg$lifespan.ind <- dom_ind_lifespan.avg$lifespan / (dom_ind_lifespan.avg$ind / 525600) # convert from minutes to years anc calculate lifespan/independence
 
 summary(lm(dci.avg ~ ind + lifespan, data = dom_ind_lifespan.avg))
 #> 
@@ -594,8 +611,85 @@ summary(lm(modified_landaus_h.avg ~ ind + lifespan, data = dom_ind_lifespan.avg)
 #> Multiple R-squared:  0.01542,    Adjusted R-squared:  -0.06663 
 #> F-statistic: 0.1879 on 2 and 24 DF,  p-value: 0.8299
 
+summary(lm(dci.avg ~ lifespan.ind, data = dom_ind_lifespan.avg))
+#> 
+#> Call:
+#> lm(formula = dci.avg ~ lifespan.ind, data = dom_ind_lifespan.avg)
+#> 
+#> Residuals:
+#>      Min       1Q   Median       3Q      Max 
+#> -0.64898 -0.02120  0.05352  0.10221  0.15119 
+#> 
+#> Coefficients:
+#>               Estimate Std. Error t value Pr(>|t|)    
+#> (Intercept)  8.488e-01  3.532e-02   24.03   <2e-16 ***
+#> lifespan.ind 1.906e-07  3.891e-07    0.49    0.629    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Residual standard error: 0.1801 on 25 degrees of freedom
+#> Multiple R-squared:  0.009503,   Adjusted R-squared:  -0.03012 
+#> F-statistic: 0.2398 on 1 and 25 DF,  p-value: 0.6286
+summary(lm(ttri.avg ~ lifespan.ind, data = dom_ind_lifespan.avg))
+#> 
+#> Call:
+#> lm(formula = ttri.avg ~ lifespan.ind, data = dom_ind_lifespan.avg)
+#> 
+#> Residuals:
+#>      Min       1Q   Median       3Q      Max 
+#> -0.44248 -0.07252  0.04361  0.09912  0.13544 
+#> 
+#> Coefficients:
+#>               Estimate Std. Error t value Pr(>|t|)    
+#> (Intercept)  8.646e-01  2.724e-02  31.743   <2e-16 ***
+#> lifespan.ind 2.608e-07  3.000e-07   0.869    0.393    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Residual standard error: 0.1389 on 25 degrees of freedom
+#> Multiple R-squared:  0.02935,    Adjusted R-squared:  -0.009479 
+#> F-statistic: 0.7559 on 1 and 25 DF,  p-value: 0.3929
+summary(lm(ds_steepness.avg ~ lifespan.ind, data = dom_ind_lifespan.avg))
+#> 
+#> Call:
+#> lm(formula = ds_steepness.avg ~ lifespan.ind, data = dom_ind_lifespan.avg)
+#> 
+#> Residuals:
+#>      Min       1Q   Median       3Q      Max 
+#> -0.35100 -0.14740 -0.02919  0.14935  0.30964 
+#> 
+#> Coefficients:
+#>                Estimate Std. Error t value Pr(>|t|)    
+#> (Intercept)   5.624e-01  3.981e-02  14.127 2.02e-13 ***
+#> lifespan.ind -2.058e-07  4.386e-07  -0.469    0.643    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Residual standard error: 0.203 on 25 degrees of freedom
+#> Multiple R-squared:  0.008733,   Adjusted R-squared:  -0.03092 
+#> F-statistic: 0.2202 on 1 and 25 DF,  p-value: 0.6429
+summary(lm(modified_landaus_h.avg ~ lifespan.ind, data = dom_ind_lifespan.avg))
+#> 
+#> Call:
+#> lm(formula = modified_landaus_h.avg ~ lifespan.ind, data = dom_ind_lifespan.avg)
+#> 
+#> Residuals:
+#>      Min       1Q   Median       3Q      Max 
+#> -0.38899 -0.09932  0.03239  0.11700  0.30573 
+#> 
+#> Coefficients:
+#>                Estimate Std. Error t value Pr(>|t|)    
+#> (Intercept)   6.515e-01  3.710e-02  17.561 1.42e-15 ***
+#> lifespan.ind -1.557e-07  4.087e-07  -0.381    0.706    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Residual standard error: 0.1891 on 25 degrees of freedom
+#> Multiple R-squared:  0.005771,   Adjusted R-squared:  -0.034 
+#> F-statistic: 0.1451 on 1 and 25 DF,  p-value: 0.7065
+
 # all
-dom_offspring_ind_lifespan.avg <- merge(dom_offspring.avg, dom_ind_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"))
+dom_offspring_ind_lifespan.avg <- merge(dom_offspring.avg, dom_ind_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"), all=FALSE)
 
 summary(lm(dci.avg ~ offspring + ind + lifespan, data = dom_offspring_ind_lifespan.avg))
 #> 
@@ -682,27 +776,117 @@ summary(lm(modified_landaus_h.avg ~ offspring + ind + lifespan, data = dom_offsp
 #> Residual standard error: 0.1934 on 21 degrees of freedom
 #> Multiple R-squared:  0.0619, Adjusted R-squared:  -0.07211 
 #> F-statistic: 0.4619 on 3 and 21 DF,  p-value: 0.7119
+
+summary(lm(dci.avg ~ offspring + lifespan.ind, data = dom_offspring_ind_lifespan.avg))
+#> 
+#> Call:
+#> lm(formula = dci.avg ~ offspring + lifespan.ind, data = dom_offspring_ind_lifespan.avg)
+#> 
+#> Residuals:
+#>      Min       1Q   Median       3Q      Max 
+#> -0.64106 -0.02629  0.06144  0.10449  0.15862 
+#> 
+#> Coefficients:
+#>               Estimate Std. Error t value Pr(>|t|)    
+#> (Intercept)  8.405e-01  5.603e-02  15.000 4.91e-13 ***
+#> offspring    3.798e-04  1.658e-02   0.023    0.982    
+#> lifespan.ind 2.072e-07  4.134e-07   0.501    0.621    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Residual standard error: 0.1896 on 22 degrees of freedom
+#> Multiple R-squared:  0.01136,    Adjusted R-squared:  -0.07851 
+#> F-statistic: 0.1264 on 2 and 22 DF,  p-value: 0.8819
+summary(lm(ttri.avg ~ offspring + lifespan.ind, data = dom_offspring_ind_lifespan.avg))
+#> 
+#> Call:
+#> lm(formula = ttri.avg ~ offspring + lifespan.ind, data = dom_offspring_ind_lifespan.avg)
+#> 
+#> Residuals:
+#>      Min       1Q   Median       3Q      Max 
+#> -0.43709 -0.08598  0.04900  0.12003  0.14083 
+#> 
+#> Coefficients:
+#>               Estimate Std. Error t value Pr(>|t|)    
+#> (Intercept)  8.577e-01  4.349e-02  19.723 1.78e-15 ***
+#> offspring    1.465e-03  1.287e-02   0.114    0.910    
+#> lifespan.ind 2.723e-07  3.208e-07   0.849    0.405    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Residual standard error: 0.1471 on 22 degrees of freedom
+#> Multiple R-squared:  0.03171,    Adjusted R-squared:  -0.05632 
+#> F-statistic: 0.3602 on 2 and 22 DF,  p-value: 0.7016
+summary(lm(ds_steepness.avg ~ offspring + lifespan.ind, data = dom_offspring_ind_lifespan.avg))
+#> 
+#> Call:
+#> lm(formula = ds_steepness.avg ~ offspring + lifespan.ind, data = dom_offspring_ind_lifespan.avg)
+#> 
+#> Residuals:
+#>      Min       1Q   Median       3Q      Max 
+#> -0.32393 -0.13517 -0.02496  0.16378  0.33670 
+#> 
+#> Coefficients:
+#>                Estimate Std. Error t value Pr(>|t|)    
+#> (Intercept)   5.294e-01  6.004e-02   8.817 1.13e-08 ***
+#> offspring     5.962e-03  1.776e-02   0.336     0.74    
+#> lifespan.ind -1.488e-07  4.429e-07  -0.336     0.74    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Residual standard error: 0.2031 on 22 degrees of freedom
+#> Multiple R-squared:  0.01155,    Adjusted R-squared:  -0.07831 
+#> F-statistic: 0.1285 on 2 and 22 DF,  p-value: 0.8801
+summary(lm(modified_landaus_h.avg ~ offspring + lifespan.ind, data = dom_offspring_ind_lifespan.avg))
+#> 
+#> Call:
+#> lm(formula = modified_landaus_h.avg ~ offspring + lifespan.ind, 
+#>     data = dom_offspring_ind_lifespan.avg)
+#> 
+#> Residuals:
+#>     Min      1Q  Median      3Q     Max 
+#> -0.3649 -0.1256  0.0244  0.1124  0.3082 
+#> 
+#> Coefficients:
+#>                Estimate Std. Error t value Pr(>|t|)    
+#> (Intercept)   6.202e-01  5.733e-02  10.819 2.83e-10 ***
+#> offspring     7.190e-03  1.696e-02   0.424    0.676    
+#> lifespan.ind -1.049e-07  4.229e-07  -0.248    0.806    
+#> ---
+#> Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+#> 
+#> Residual standard error: 0.1939 on 22 degrees of freedom
+#> Multiple R-squared:  0.01217,    Adjusted R-squared:  -0.07763 
+#> F-statistic: 0.1355 on 2 and 22 DF,  p-value: 0.874
 ```
 
 Plot:
 
 ``` r
 # merge all without deleting rows:
-dom_ind_lifespan.avg.all <- dom_ind_lifespan.avg <- merge(dom_ind.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"), all = TRUE)
+dom_ind_lifespan.avg.all <- merge(dom_ind.avg, dom_lifespan.avg, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"), all = TRUE)
+dom_ind_lifespan.avg.all$lifespan.ind <- dom_ind_lifespan.avg.all$lifespan / (dom_ind_lifespan.avg.all$ind / 525600) # convert from minutes to years anc calculate lifespan/independence
+# remove outliers
+z_scores <- scale(dom_ind_lifespan.avg.all$lifespan.ind)
+outliers <- abs(z_scores) > 3
+dom_ind_lifespan.avg.all$lifespan.ind[outliers] = NA
+# add normalized values
+dom_ind_lifespan.avg.all$lifespan.ind.norm <- (dom_ind_lifespan.avg.all$lifespan.ind - min(dom_ind_lifespan.avg.all$lifespan.ind,na.rm=TRUE)) / (max(dom_ind_lifespan.avg.all$lifespan.ind,na.rm=TRUE) - min(dom_ind_lifespan.avg.all$lifespan.ind,na.rm=TRUE))
+
 dom_offspring_ind_lifespan.avg.all <- merge(dom_offspring.avg, dom_ind_lifespan.avg.all, by = c("species", "dci.avg", "ttri.avg", "ds_steepness.avg", "modified_landaus_h.avg"), all = TRUE)
 ```
 
 DCI:
 
 ``` r
-dci.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("dci.avg", "offspring.norm", "ind.norm", "lifespan.norm")], id.vars = "dci.avg")
+dci.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("dci.avg", "offspring.norm", "ind.norm", "lifespan.norm", "lifespan.ind.norm")], id.vars = "dci.avg")
 
 # Plotting
 dci.plot <- ggplot(data=dci.long, aes(x = value, y = dci.avg, color = variable)) +
   geom_point() +
   labs(x = "Normalized Value", y = "DCI", color = "Variable") +
   scale_color_brewer(palette = "Dark2", 
-                     labels = c("Offspring", "Independence Age", "Lifespan")) +
+                     labels = c("Offspring", "Independence Age", "Lifespan", "Lifespan / Independance")) +
   theme_minimal() +
   theme(legend.position = "right")
 ```
@@ -710,14 +894,14 @@ dci.plot <- ggplot(data=dci.long, aes(x = value, y = dci.avg, color = variable))
 TTRI:
 
 ``` r
-ttri.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("ttri.avg", "offspring.norm", "ind.norm", "lifespan.norm")], id.vars = "ttri.avg")
+ttri.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("ttri.avg", "offspring.norm", "ind.norm", "lifespan.norm", "lifespan.ind.norm")], id.vars = "ttri.avg")
 
 # Plotting
 ttri.plot <- ggplot(data=ttri.long, aes(x = value, y = ttri.avg, color = variable)) +
   geom_point() + 
   labs(x = "Normalized Value", y = "TTRI", color = "Variable") +
   scale_color_brewer(palette = "Dark2", 
-                     labels = c("Offspring", "Independence Age", "Lifespan")) +
+                     labels = c("Offspring", "Independence Age", "Lifespan", "Lifespan / Independance")) +
   theme_minimal() +
   theme(legend.position = "none")  # Remove legend
 ```
@@ -725,14 +909,14 @@ ttri.plot <- ggplot(data=ttri.long, aes(x = value, y = ttri.avg, color = variabl
 DS_Steepness:
 
 ``` r
-ds_steepness.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("ds_steepness.avg", "offspring.norm", "ind.norm", "lifespan.norm")], id.vars = "ds_steepness.avg")
+ds_steepness.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("ds_steepness.avg", "offspring.norm", "ind.norm", "lifespan.norm", "lifespan.ind.norm")], id.vars = "ds_steepness.avg")
 
 # Plotting
 ds_steepness.plot <- ggplot(data=ds_steepness.long, aes(x = value, y = ds_steepness.avg, color = variable)) +
   geom_point() +
   labs(x = "Normalized Value", y = "DS Steepness", color = "Variable") +
   scale_color_brewer(palette = "Dark2", 
-                     labels = c("Offspring", "Independence Age", "Lifespan")) +
+                     labels = c("Offspring", "Independence Age", "Lifespan", "Lifespan / Independance")) +
   theme_minimal() +
   theme(legend.position = "none")  # Remove legend
 ```
@@ -740,14 +924,14 @@ ds_steepness.plot <- ggplot(data=ds_steepness.long, aes(x = value, y = ds_steepn
 Modifies Landau’s H:
 
 ``` r
-modified_landaus_h.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("modified_landaus_h.avg", "offspring.norm", "ind.norm", "lifespan.norm")], id.vars = "modified_landaus_h.avg")
+modified_landaus_h.long <- reshape2::melt(dom_offspring_ind_lifespan.avg.all[, c("modified_landaus_h.avg", "offspring.norm", "ind.norm", "lifespan.norm", "lifespan.ind.norm")], id.vars = "modified_landaus_h.avg")
 
 # Plotting
 modified_landaus_h.plot <- ggplot(data=modified_landaus_h.long, aes(x = value, y = modified_landaus_h.avg, color = variable)) +
   geom_point() +
   labs(x = "Normalized Value", y = "Modified Landau's H", color = "Variable") +
   scale_color_brewer(palette = "Dark2", 
-                     labels = c("Offspring", "Independence Age", "Lifespan")) +
+                     labels = c("Offspring", "Independence Age", "Lifespan", "Lifespan / Independance")) +
   theme_minimal() +
   theme(legend.position = "none")  # Remove legend
 ```
@@ -756,23 +940,21 @@ Combine plots:
 
 ``` r
 dom.legend <- cowplot::get_legend(dci.plot)
-#> Warning: Removed 66 rows containing missing values or values outside the scale range
+#> Warning: Removed 116 rows containing missing values or values outside the scale range
 #> (`geom_point()`).
 #> Warning in get_plot_component(plot, "guide-box"): Multiple components found;
 #> returning the first one. To return all, use `return_all = TRUE`.
 dom.plot <- cowplot::plot_grid(
-  dci.plot + theme(legend.position = "none"), ttri.plot, ds_steepness.plot, modified_landaus_h.plot,
-  ncol = 2, align = 'v'
+  dci.plot + theme(legend.position = "none"), ttri.plot, ds_steepness.plot,
+  ncol = 3, align = 'v'
 )
-#> Warning: Removed 66 rows containing missing values or values outside the scale range
+#> Warning: Removed 116 rows containing missing values or values outside the scale range
 #> (`geom_point()`).
-#> Warning: Removed 66 rows containing missing values or values outside the scale range
+#> Warning: Removed 116 rows containing missing values or values outside the scale range
 #> (`geom_point()`).
-#> Removed 66 rows containing missing values or values outside the scale range
+#> Removed 116 rows containing missing values or values outside the scale range
 #> (`geom_point()`).
-#> Removed 66 rows containing missing values or values outside the scale range
-#> (`geom_point()`).
-dom.plot <- cowplot::plot_grid(dom.plot, dom.legend, ncol = 1, rel_heights = c(1, 0.3))
+dom.plot <- cowplot::plot_grid(dom.plot, dom.legend, ncol = 1, rel_heights = c(0.3, 0.3))
 print(dom.plot)
 ```
 
